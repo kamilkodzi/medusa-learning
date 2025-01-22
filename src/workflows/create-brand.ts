@@ -1,6 +1,7 @@
 import { createStep, StepResponse } from '@medusajs/framework/workflows-sdk';
 import { BRAND_MODULE } from '../modules/brand';
 import BrandModuleService from '../modules/brand/service';
+import { emitEventStep } from '@medusajs/medusa/core-flows';
 import {
   // ...
   createWorkflow,
@@ -36,6 +37,14 @@ export const createBrandWorkflow = createWorkflow(
   'create-brand',
   (input: CreateBrandWorkflowInput) => {
     const brand = createBrandStep(input);
+
+    emitEventStep({
+      eventName: 'brand.created',
+      data: {
+        id: brand.id,
+        test: 'test',
+      },
+    });
 
     return new WorkflowResponse(brand);
   }

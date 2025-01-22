@@ -1,4 +1,4 @@
-import { Context, Logger } from '@medusajs/framework/types';
+import { Context, InferTypeOf, Logger } from '@medusajs/framework/types';
 import {
   InjectManager,
   MedusaContext,
@@ -33,6 +33,11 @@ type InjectedDependencies = {
 //     this.logger_.info('What is inside hello module options: ' + this.options_);
 //   }
 
+//   // ...
+// }
+
+type MyCustom = InferTypeOf<typeof MyCustom>; // when type is needed we casn use it example:
+// async doSomething(): Promise<MyCustom> {
 //   // ...
 // }
 
