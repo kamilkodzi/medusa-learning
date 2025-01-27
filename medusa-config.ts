@@ -15,6 +15,14 @@ module.exports = defineConfig({
   },
   modules: [
     {
+      resolve: '@medusajs/medusa/workflow-engine-redis',
+      options: {
+        redis: {
+          url: process.env.WE_REDIS_URL,
+        },
+      },
+    },
+    {
       resolve: './src/modules/cms',
       options: {
         apiKey: process.env.CMS_API_KEY,

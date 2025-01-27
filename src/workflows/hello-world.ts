@@ -1,16 +1,85 @@
-import { ContainerRegistrationKeys } from '@medusajs/framework/utils';
+import {
+  ContainerRegistrationKeys,
+  Modules,
+  promiseAll,
+  TransactionHandlerType,
+} from '@medusajs/framework/utils';
 import {
   createStep,
   createWorkflow,
+  parallelize,
   StepResponse,
   transform,
   when,
   WorkflowResponse,
 } from '@medusajs/framework/workflows-sdk';
 
-const step1 = createStep('step-1', async () => {
-  return new StepResponse(`Hello from step one!`);
-});
+type SetStepSuccessStepInput = {
+  transactionId: string;
+};
+type SetStepFailureStepInput = {
+  transactionId: string;
+};
+
+export const setStepSuccessStep = createStep(
+  'set-step-success-step',
+  async function ({ transactionId }: SetStepSuccessStepInput, { container }) {
+    const workflowEngineService = container.resolve(Modules.WORKFLOW_ENGINE);
+
+    await workflowEngineService.setStepSuccess({
+      idempotencyKey: {
+        action: TransactionHandlerType.INVOKE,
+        transactionId,
+        stepId: 'step-async',
+        workflowId: 'hello-world',
+      },
+      stepResponse: new StepResponse('Done!'),
+      options: {
+        container,
+      },
+    });
+  }
+);
+
+export const setStepFailureStep = createStep(
+  'set-step-failed-step',
+  async function ({ transactionId }: SetStepFailureStepInput, { container }) {
+    const workflowEngineService = container.resolve(Modules.WORKFLOW_ENGINE);
+
+    await workflowEngineService.setStepFailure({
+      idempotencyKey: {
+        action: TransactionHandlerType.INVOKE,
+        transactionId,
+        stepId: 'step-async',
+        workflowId: 'hello-world',
+      },
+      stepResponse: new StepResponse('Failed!'),
+      options: {
+        container,
+      },
+    });
+  }
+);
+
+const step1 = createStep(
+  // STEPS with parameters like retry
+  { name: 'step-1', maxRetries: 2, retryInterval: 2, timeout: 2 },
+  async () => {
+    return new StepResponse(`Hello from step one!`);
+  }
+);
+
+// ASYNC + not returning STEPResponse affect to create Long-Running Workflow (https://docs.medusajs.com/learn/fundamentals/workflows/long-running-workflow#configure-long-running-workflows)
+// A workflow is also considered long-running if one of its steps has their retryInterval
+const stepAsync = createStep(
+  {
+    name: 'step-async',
+    async: true,
+  },
+  async () => {
+    console.log('Waiting to be successful...');
+  }
+);
 
 type WorkflowInput = {
   name: string[];
@@ -19,6 +88,15 @@ type WorkflowInput = {
 
 const step2 = createStep('step-2', async ({ name }: WorkflowInput) => {
   return new StepResponse(`Hello from step two! ${name}`);
+});
+
+const step5 = createStep('step-5', async () => {
+  return new StepResponse(`Hello from step five!`);
+});
+
+const finalStep = createStep('final-step', async () => {
+  console.log('Hello from final step!');
+  return new StepResponse(`Hello from final step!`);
 });
 
 const step3 = createStep(
@@ -37,11 +115,26 @@ const step3 = createStep(
 );
 
 const step4 = createStep('step-4', async () => {
-  throw new Error('Throwing an error');
+  // throw new Error('Throwing an error');
+  // Handling errors in loops (https://docs.medusajs.com/learn/fundamentals/workflows/compensation-function#handle-errors-in-loops)
+  // try {
+  // await promiseAll(
+  //     ids.map(async (id) => {
+  //       const data = await erpModuleService.retrieve(id)
+  //       await erpModuleService.delete(id)
+  //       prevData.push(id)
+  //     })
+  //   )
+  // } catch (e) {
+  //   return StepResponse.permanentFailure(
+  //     `An error occurred: ${e}`,
+  //     prevData
+  //   )
+  // }
 });
 
 export const myWorkflow = createWorkflow(
-  'hello-world',
+  { name: 'hello-world', retentionTime: 99999, store: true },
   (input: WorkflowInput) => {
     // This is evaluated just once - when workflow is created on system startup, not every time when executed
     const constant_date = new Date();
@@ -80,9 +173,17 @@ export const myWorkflow = createWorkflow(
       };
     });
 
-    const test = step4();
+    // Execute in parallel with parallelize (https://docs.medusajs.com/learn/fundamentals/workflows/parallel-steps#parallelize-utility-function)
+    // const [prices, productSalesChannel] = parallelize(step4(), step5());
+    parallelize(step4(), step5());
 
-    return new WorkflowResponse({ message: constant_date, today, str3 });
+    const step_async = stepAsync();
+
+    const final = finalStep();
+
+    // setStepSuccessStep();
+
+    return new WorkflowResponse({ final: final, step_async });
   }
 );
 
